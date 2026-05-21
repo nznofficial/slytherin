@@ -101,7 +101,7 @@
 
         function tick() {
             if (dead) {
-                if (++deadTick >= 20) init(); // 20 x 100ms = 2s
+                if (++deadTick >= 20) init();
                 return;
             }
 
@@ -125,26 +125,26 @@
             }
         }
 
-        // Draw the golden snitch: winged golden sphere
+        // Returns the direction the tail is trailing (away from the body)
+        function tailDir() {
+            if (snake.length < 2) return {x: 1, y: 0};
+            const t = snake[snake.length - 1];
+            const p = snake[snake.length - 2];
+            return { x: Math.sign(t.x - p.x), y: Math.sign(t.y - p.y) };
+        }
+
         function drawSnitch(x, y, pulse) {
-            const cx = x + C / 2;
-            const cy = y + C / 2;
-            const r  = C / 2 - 1; // 9px
+            const cx = x + C / 2, cy = y + C / 2, r = C / 2 - 1;
 
-            // Wings — silvery-white, bezier curves
-            const wingGlow = 6 + pulse * 4;
+            // Wings
             ctx.fillStyle = 'rgba(220, 232, 255, 0.90)';
-            ctx.shadowBlur = wingGlow;
+            ctx.shadowBlur = 6 + pulse * 4;
             ctx.shadowColor = 'rgba(210, 225, 255, 0.75)';
-
-            // Left wing
             ctx.beginPath();
             ctx.moveTo(cx - r + 1, cy - 2);
             ctx.bezierCurveTo(cx - r - 9, cy - 8, cx - r - 11, cy + 2, cx - r + 1, cy + 3);
             ctx.closePath();
             ctx.fill();
-
-            // Right wing
             ctx.beginPath();
             ctx.moveTo(cx + r - 1, cy - 2);
             ctx.bezierCurveTo(cx + r + 9, cy - 8, cx + r + 11, cy + 2, cx + r - 1, cy + 3);
@@ -152,13 +152,12 @@
             ctx.fill();
             ctx.shadowBlur = 0;
 
-            // Golden sphere with radial gradient (highlight top-left)
+            // Sphere
             const grad = ctx.createRadialGradient(cx - 3, cy - 3, 1, cx, cy, r);
             grad.addColorStop(0,    '#FFFFF0');
             grad.addColorStop(0.30, '#FFD700');
             grad.addColorStop(0.75, '#C8960C');
             grad.addColorStop(1,    '#7A5700');
-
             ctx.shadowBlur = 14 + pulse * 8;
             ctx.shadowColor = '#FFD700';
             ctx.fillStyle = grad;
@@ -168,55 +167,101 @@
             ctx.shadowBlur = 0;
         }
 
+        function drawBroom() {
+            const len = snake.length;
+
+            // --- Handle: all segments except the last ---
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = 'rgba(80, 40, 10, 0.7)';
+
+            for (let i = 0; i < len - 1; i++) {
+                const s = snake[i];
+                // Head tip is a lighter, brighter wood; body is darker
+                ctx.fillStyle = i === 0 ? '#A0652A' : '#7A4520';
+                ctx.fillRect(s.x, s.y, C, C);
+            }
+            ctx.shadowBlur = 0;
+
+            // Wood grain: two thin lighter bands across each segment
+            ctx.fillStyle = 'rgba(220, 160, 80, 0.18)';
+            for (let i = 0; i < len - 1; i++) {
+                const s = snake[i];
+                ctx.fillRect(s.x + 1, s.y + 4,  C - 2, 2);
+                ctx.fillRect(s.x + 1, s.y + 13, C - 2, 2);
+            }
+
+            // --- Bristle block: last segment ---
+            const td  = tailDir();
+            const tail = snake[len - 1];
+
+            const horiz = td.x !== 0; // tail trailing left or right
+
+            // The bristle block is wider in the axis perpendicular to travel
+            const EXTRA = 10; // px to extend each side
+            const bx = horiz ? tail.x           : tail.x - EXTRA;
+            const by = horiz ? tail.y - EXTRA   : tail.y;
+            const bw = horiz ? C                : C + EXTRA * 2;
+            const bh = horiz ? C + EXTRA * 2   : C;
+
+            // Straw base
+            ctx.fillStyle = '#C8A050';
+            ctx.fillRect(bx, by, bw, bh);
+
+            // Dark separator line where handle meets bristles (inner edge)
+            ctx.fillStyle = '#5C3010';
+            if (horiz) {
+                // tail is trailing horizontally → inner edge is left or right face
+                const innerX = td.x > 0 ? tail.x : tail.x + C - 2;
+                ctx.fillRect(innerX, by, 2, bh);
+            } else {
+                // tail is trailing vertically → inner edge is top or bottom face
+                const innerY = td.y > 0 ? tail.y : tail.y + C - 2;
+                ctx.fillRect(bx, innerY, bw, 2);
+            }
+
+            // Bristle strand lines (run perpendicular to the block's long axis)
+            ctx.fillStyle = 'rgba(80, 50, 10, 0.30)';
+            if (horiz) {
+                // block is taller; strands run horizontally
+                for (let l = 4; l < bh - 2; l += 5) {
+                    ctx.fillRect(bx + 1, by + l, bw - 2, 1);
+                }
+            } else {
+                // block is wider; strands run vertically
+                for (let l = 4; l < bw - 2; l += 5) {
+                    ctx.fillRect(bx + l, by + 1, 1, bh - 2);
+                }
+            }
+        }
+
         function draw() {
-            time += 0.18; // ~1.8 rad/s → full pulse every ~3.5s
-            const pulse = (Math.sin(time) + 1) / 2; // 0..1
+            time += 0.18;
+            const pulse = (Math.sin(time) + 1) / 2;
 
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, W, H);
 
             if (dead) {
                 ctx.textAlign = 'center';
-
                 ctx.shadowBlur = 32;
                 ctx.shadowColor = '#FFD700';
                 ctx.fillStyle = '#FFD700';
                 ctx.font = 'bold 48px "Courier New", monospace';
                 ctx.fillText('GAME OVER', W / 2, 240);
                 ctx.shadowBlur = 0;
-
                 ctx.fillStyle = '#C8960C';
                 ctx.font = '24px "Courier New", monospace';
                 ctx.fillText('Final Score: ' + score, W / 2, 318);
-
                 ctx.fillStyle = '#444';
                 ctx.font = '18px "Courier New", monospace';
                 ctx.fillText('Auto-restarting...', W / 2, 373);
-
                 ctx.textAlign = 'left';
                 return;
             }
 
-            // Draw golden snitch (food) with breathing pulse
             drawSnitch(food.x, food.y, pulse);
+            drawBroom();
 
-            // Snake body — gold with metallic sheen
-            ctx.shadowBlur = 8;
-            ctx.shadowColor = '#C8960C';
-            for (let i = 0; i < snake.length; i++) {
-                ctx.fillStyle = i === 0 ? '#FFE044' : '#CFA020';
-                ctx.fillRect(snake[i].x, snake[i].y, C, C);
-            }
-            ctx.shadowBlur = 0;
-
-            // Metallic highlight strip (top + left edge of each body segment)
-            ctx.fillStyle = 'rgba(255, 252, 190, 0.22)';
-            for (let i = 0; i < snake.length; i++) {
-                ctx.fillRect(snake[i].x,     snake[i].y, C, 2); // top
-                ctx.fillRect(snake[i].x,     snake[i].y, 2, C); // left
-            }
-
-            // Score in gold
             ctx.fillStyle = '#FFD700';
             ctx.font = '24px "Courier New", monospace';
             ctx.fillText('Score: ' + score, 10, 30);
